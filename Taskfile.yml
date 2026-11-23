@@ -1,0 +1,57 @@
+version: "3"
+
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: -s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}
+  IMAGE: ghcr.io/jellystics/matchboxd
+
+tasks:
+  build:
+    desc: Build the static binary ./app with the version from git
+    env: { CGO_ENABLED: "0" }
+    cmds:
+      - go build -trimpath -ldflags="{{.LDFLAGS}}" -o app .
+
+  run:
+    desc: Build and run on http://localhost:8080
+    deps: [build]
+    cmds:
+      - ./app
+
+  test:
+    desc: Vet and run the unit tests
+    cmds:
+      - go vet ./...
+      - go test ./...
+
+  test:live:
+    desc: Run the tests against the real letterboxd.com
+    env: { MATCHBOXD_LIVE: "1" }
+    cmds:
+      - go test ./internal/letterboxd -run Live -v -count=1
+
+  docker:
+    desc: Build the Docker image for the local platform
+    cmds:
+      - >-
+        docker build
+        --build-arg VERSION={{.VERSION}} --build-arg COMMIT={{.COMMIT}} --build-arg DATE={{.DATE}}
+        -t {{.IMAGE}}:{{.VERSION}} -t {{.IMAGE}}:local .
+
+  release:
+    desc: "Tag a new version and push it (CI builds the images and the release). Usage: task release -- v1.2.3"
+    preconditions:
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "usage: task release -- v1.2.3"
+      - sh: echo "{{.CLI_ARGS}}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+        msg: "the version must look like v1.2.3 (or v1.2.3-rc.1)"
+      - sh: test -z "$(git status --porcelain)"
+        msg: "commit your changes first"
+    cmds:
+      - git tag -a {{.CLI_ARGS}} -m "{{.CLI_ARGS}}"
+      - git push origin {{.CLI_ARGS}}

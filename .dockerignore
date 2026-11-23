@@ -1,0 +1,12 @@
+.git
+.github
+.direnv
+.envrc
+flake.nix
+flake.lock
+/app
+/matchboxd
+/dist
+*.md
+Dockerfile
+.dockerignore
