@@ -1,40 +1,67 @@
 # matchboxd
 
-Petite application web pour tirer au sort **un film à regarder à deux**, à partir de deux comptes [Letterboxd](https://letterboxd.com).
+A small web app that randomly picks **a movie for two people to watch together**, based on their [Letterboxd](https://letterboxd.com) accounts.
 
-1. Entrez deux pseudos Letterboxd.
-2. Pour chaque personne, choisissez une source : watchlist, films vus, films aimés ou une liste personnalisée.
-3. Cliquez sur **Tirer un film** : l’application affiche un film présent dans les **deux** sources (affiche, réalisateur, durée, genres, synopsis, note Letterboxd, note IMDb si une clé OMDb est configurée).
-4. **Un autre** retire un film parmi les films en commun, sans répéter celui affiché.
+1. Enter two Letterboxd usernames.
+2. For each person, pick a source: watchlist, watched films, liked films or a custom list.
+3. Click **Pick a movie**: the app shows a movie that appears in **both** sources (poster, director, runtime, genres, synopsis, Letterboxd rating, and IMDb rating when an OMDb key is set).
+4. **Pick another** draws again from the movies in common, without repeating the one just shown.
 
-L’interface est disponible en **français et en anglais** (bouton FR | EN en haut à droite ; langue du navigateur par défaut, choix mémorisé). Les synopsis restent dans la langue fournie par Letterboxd (anglais).
+The interface is available in **English and French** (FR | EN switch in the top-right corner; defaults to the browser language and remembers your choice). Synopses stay in the language Letterboxd provides (English).
 
-Tout tient dans un seul exécutable Go : l’API JSON et l’interface (HTML/CSS/JS embarqués avec `go:embed`).
+Everything ships as a single Go executable: the JSON API and the web interface (HTML/CSS/JS embedded with `go:embed`).
 
-## Compiler et lancer
+## Build and run
 
-Prérequis : Go ≥ 1.27 (ou `nix develop` grâce au `flake.nix` du dépôt).
+Requirements: Go ≥ 1.27 (or `nix develop`, thanks to the repository's `flake.nix`).
 
 ```sh
 go build -o app .
 ./app
 ```
 
-Puis ouvrez <http://localhost:8080>.
+Then open <http://localhost:8080>.
 
-Avec [Task](https://taskfile.dev) (fourni par le flake), le binaire embarque aussi sa version (tirée de `git describe`) :
+With [Task](https://taskfile.dev) (provided by the flake), the binary also embeds its version (taken from `git describe`):
 
 ```sh
-task build   # binaire statique ./app versionné
-task run     # compile et lance
+task build   # versioned static binary ./app
+task run     # build and run
 ./app -version
 ```
 
-Binaires précompilés (Linux, macOS, Windows, FreeBSD ; amd64, arm64, arm…) : voir les [Releases GitHub](https://github.com/Jellystics/matchboxd/releases).
+Prebuilt binaries (Linux, macOS, Windows, FreeBSD; amd64, arm64, arm…) are available on the [GitHub Releases](https://github.com/Jellystics/matchboxd/releases) page.
+
+### Configuration
+
+| Environment variable | Flag         | Default      | Purpose                                              |
+|----------------------|--------------|--------------|------------------------------------------------------|
+| `PORT`               | `-port`      | `8080`       | HTTP port                                            |
+| `OMDB_API_KEY`       | `-omdb-key`  | —            | OMDb key to show the IMDb rating (optional)          |
+| —                    | `-cache-ttl` | `10m`        | How long fetched pages stay in the memory cache      |
+| `MATCHBOXD_SESSION`  | `-session`   | user cache   | File where the Letterboxd session (cookies) is kept  |
+| `MATCHBOXD_BROWSER`  | `-browser`   | `chrome_152` | Chrome version whose TLS fingerprint is imitated     |
+
+The session file defaults to `~/Library/Caches/matchboxd/session.json` (macOS),
+`~/.cache/matchboxd/session.json` (Linux) or `%LocalAppData%\matchboxd\session.json` (Windows).
+Delete it to start over with a fresh session.
+
+```sh
+OMDB_API_KEY=abcd1234 PORT=3000 ./app
+```
+
+Without an OMDb key, the IMDb rating is simply hidden (the IMDb link is still shown).
+
+## Getting a free OMDb key
+
+1. Go to <https://www.omdbapi.com/apikey.aspx>.
+2. Choose the **FREE** plan (1,000 requests per day), enter your email and a use case ("personal project" is fine).
+3. Click the activation link sent to you by email.
+4. Start the app with `OMDB_API_KEY=<your key> ./app`.
 
 ## Docker
 
-Image multi-architecture publiée sur GHCR : `linux/amd64`, `arm64`, `arm/v7`, `arm/v6`, `386`, `ppc64le`, `s390x`, `riscv64`.
+Multi-architecture image published on GHCR: `linux/amd64`, `arm64`, `arm/v7`, `arm/v6`, `386`, `ppc64le`, `s390x`, `riscv64`.
 
 ```sh
 docker run -d --name matchboxd -p 8080:8080 \
@@ -43,56 +70,29 @@ docker run -d --name matchboxd -p 8080:8080 \
   ghcr.io/jellystics/matchboxd:latest
 ```
 
-- L’image part de `scratch` (~19 Mo) et tourne en utilisateur non-root (`65532`).
-- Le volume `/data` conserve la session Letterboxd (`/data/session.json`) entre les redémarrages.
-- Tags disponibles : `latest` et `1.2.3` / `1.2` / `1` pour les versions, `edge` pour la branche `main`, `sha-abc1234` pour chaque commit.
+- The image is built `FROM scratch` (~19 MB) and runs as a non-root user (`65532`).
+- The `/data` volume keeps the Letterboxd session (`/data/session.json`) across restarts.
+- Available tags: `latest` and `1.2.3` / `1.2` / `1` for releases, `edge` for the `main` branch, `sha-abc1234` for each commit.
 
-Pour construire l’image localement : `task docker` (ou `docker build -t matchboxd .`).
+To build the image locally: `task docker` (or `docker build -t matchboxd .`).
 
-## Versions et publication
+## Versioning and releases
 
-Le projet suit le [versionnage sémantique](https://semver.org/lang/fr/) via des tags git `vX.Y.Z`. Le workflow GitHub Actions (`.github/workflows/ci.yml`) :
+The project follows [semantic versioning](https://semver.org) through `vX.Y.Z` git tags. The GitHub Actions workflow (`.github/workflows/ci.yml`) does the following:
 
-| Événement            | Tests | Image Docker                             | Release GitHub |
-|----------------------|-------|------------------------------------------|----------------|
-| Pull request         | ✅    | construite, non publiée                  | —              |
-| Push sur `main`      | ✅    | publiée en `edge` et `sha-…`             | —              |
-| Tag `v1.2.3`         | ✅    | publiée en `1.2.3`, `1.2`, `1`, `latest` | binaires + sommes SHA-256 |
+| Event            | Tests | Docker image                             | GitHub release          |
+|------------------|-------|------------------------------------------|-------------------------|
+| Pull request     | ✅    | built, not published                     | —                       |
+| Push to `main`   | ✅    | published as `edge` and `sha-…`          | —                       |
+| Tag `v1.2.3`     | ✅    | published as `1.2.3`, `1.2`, `1`, `latest` | binaries + SHA-256 sums |
 
-Pour publier une version :
-
-```sh
-task release -- v1.2.3     # crée le tag annoté et le pousse ; la CI fait le reste
-```
-
-Un tag avec suffixe (`v1.2.3-rc.1`) produit une pré-release. Les versions `v0.x` ne reçoivent pas le tag Docker majeur `0`.
-
-### Configuration
-
-| Variable d’environnement | Option          | Défaut | Rôle                                          |
-|--------------------------|-----------------|--------|-----------------------------------------------|
-| `PORT`                   | `-port`         | `8080` | Port HTTP                                     |
-| `OMDB_API_KEY`           | `-omdb-key`     | —      | Clé OMDb pour afficher la note IMDb (optionnel) |
-| —                        | `-cache-ttl`    | `10m`  | Durée de conservation des pages en mémoire    |
-| `MATCHBOXD_SESSION`      | `-session`      | cache utilisateur | Fichier où la session Letterboxd (cookies) est conservée |
-| `MATCHBOXD_BROWSER`      | `-browser`      | `chrome_152` | Version de Chrome dont l’empreinte TLS est imitée |
-
-Le fichier de session vaut par défaut `~/Library/Caches/matchboxd/session.json` (macOS),
-`~/.cache/matchboxd/session.json` (Linux) ou `%LocalAppData%\matchboxd\session.json` (Windows).
-Supprimez-le pour repartir d’une session neuve.
+To publish a release:
 
 ```sh
-OMDB_API_KEY=abcd1234 PORT=3000 ./app
+task release -- v1.2.3     # creates the annotated tag and pushes it; CI does the rest
 ```
 
-Sans clé OMDb, la note IMDb est simplement masquée (le lien IMDb reste affiché).
-
-## Obtenir une clé OMDb gratuite
-
-1. Allez sur <https://www.omdbapi.com/apikey.aspx>.
-2. Choisissez l’offre **FREE** (1 000 requêtes par jour), renseignez votre e-mail et un usage (« personal project » suffit).
-3. Cliquez sur le lien d’activation reçu par e-mail.
-4. Lancez l’application avec `OMDB_API_KEY=<votre clé> ./app`.
+A tag with a suffix (`v1.2.3-rc.1`) produces a pre-release. `v0.x` releases don't get the `0` major Docker tag.
 
 ## Tests
 
@@ -100,45 +100,45 @@ Sans clé OMDb, la note IMDb est simplement masquée (le lien IMDb reste affich�
 go test ./...
 ```
 
-Les tests unitaires du parsing HTML utilisent de vraies pages Letterboxd enregistrées dans `internal/letterboxd/testdata/`.
+The HTML parsing unit tests use real Letterboxd pages saved in `internal/letterboxd/testdata/`.
 
-Un test « en direct » interroge le vrai site (comptes publics `davidehrlich` et `karsten`) pour vérifier que le parsing fonctionne toujours. Il est désactivé par défaut :
+A live test queries the real website (public accounts `davidehrlich` and `karsten`) to check that parsing still works. It is disabled by default:
 
 ```sh
 MATCHBOXD_LIVE=1 go test ./internal/letterboxd -run Live -v
 ```
 
-Si Letterboxd modifie son HTML, enregistrez de nouvelles pages dans `testdata/` et ajustez `parse.go`.
+If Letterboxd changes its HTML, save new pages in `testdata/` and adjust `parse.go`.
 
-## Fonctionnement
+## How it works
 
-- Letterboxd n’a pas d’API publique : le serveur Go lit les pages publiques (`/<user>/watchlist/`, `/<user>/films/`, `/<user>/likes/films/`, `/<user>/lists/`, `/<user>/list/<liste>/`, `/film/<film>/`) et les analyse avec [goquery](https://github.com/PuerkitoBio/goquery).
-- Les requêtes imitent un onglet Chrome : empreinte TLS et HTTP/2 de Chrome 152 ([tls-client](https://github.com/bogdanfinn/tls-client)), en-têtes dans l’ordre du navigateur (`sec-ch-ua`, `Sec-Fetch-*`, `Referer`, `Accept-Language`…).
-- Chaque lancement reprend la même session : une navigation de préchauffage ouvre l’accueil, puis les cookies Cloudflare (`__cf_bm`, `cf_clearance`) sont conservés dans le fichier de session et rechargés au démarrage suivant.
-- Toutes les pages d’une source sont récupérées (quelques requêtes en parallèle, espacées aléatoirement de 120 à 320 ms).
-- Les films sont comparés par leur *slug* Letterboxd, pas par leur titre.
-- Les pages analysées sont gardées en mémoire quelques minutes : les tirages suivants sont instantanés.
+- Letterboxd has no public API: the Go server reads the public pages (`/<user>/watchlist/`, `/<user>/films/`, `/<user>/likes/films/`, `/<user>/lists/`, `/<user>/list/<list>/`, `/film/<film>/`) and parses them with [goquery](https://github.com/PuerkitoBio/goquery).
+- Requests imitate a Chrome tab: Chrome 152 TLS and HTTP/2 fingerprint ([tls-client](https://github.com/bogdanfinn/tls-client)), headers in browser order (`sec-ch-ua`, `Sec-Fetch-*`, `Referer`, `Accept-Language`…).
+- Every run resumes the same session: a warm-up navigation opens the home page, then the Cloudflare cookies (`__cf_bm`, `cf_clearance`) are saved to the session file and reloaded on the next start.
+- Every page of a source is fetched (a few requests in parallel, randomly spaced by 120 to 320 ms).
+- Movies are compared by their Letterboxd *slug*, not by title.
+- Parsed pages are kept in memory for a few minutes, so subsequent draws are instant.
 
-### Limites connues
+### Known limitations
 
-Letterboxd est protégé par Cloudflare. L’empreinte TLS de Chrome et la session persistante suffisent pour la plupart des pages (watchlists, films vus, films aimés, listes et fiches de films passent en pratique), mais Cloudflare peut encore présenter un **défi JavaScript** selon le réseau ou l’IP. Ce défi ne peut être résolu qu’en exécutant du JavaScript dans un vrai navigateur : l’application ne le fait pas et affiche alors un message clair (« Letterboxd bloque temporairement nos requêtes… »). Pour l’index des listes, elle propose les listes de la première page avec un avertissement.
+Letterboxd is protected by Cloudflare. The Chrome TLS fingerprint and the persistent session are enough for most pages (watchlists, watched films, liked films, lists and film pages go through in practice), but Cloudflare may still serve a **JavaScript challenge** depending on the network or IP. That challenge can only be solved by running JavaScript in a real browser: the app doesn't do that and shows a clear message instead ("Letterboxd is temporarily blocking our requests…"). For the lists index, it offers the lists from the first page along with a warning.
 
-## Structure
+## Project structure
 
 ```
-main.go                      point d’entrée : configuration, serveur HTTP
-internal/letterboxd/         client Letterboxd : requêtes, cache, parsing HTML
-  testdata/                  pages Letterboxd enregistrées pour les tests
-internal/omdb/               note IMDb via l’API OMDb
-internal/server/             API JSON (/api/sources, /api/pick) et fichiers statiques
-web/                         interface : index.html, style.css, app.js (embarqués)
-Dockerfile                   image multi-architecture (cross-compilation Go, base scratch)
-Taskfile.yml                 build versionné, tests, image Docker, publication
-.github/workflows/ci.yml     tests, images GHCR, releases
+main.go                      entry point: configuration, HTTP server
+internal/letterboxd/         Letterboxd client: requests, cache, HTML parsing
+  testdata/                  saved Letterboxd pages used by the tests
+internal/omdb/               IMDb rating through the OMDb API
+internal/server/             JSON API (/api/sources, /api/pick) and static files
+web/                         interface: index.html, style.css, app.js (embedded)
+Dockerfile                   multi-architecture image (Go cross-compilation, scratch base)
+Taskfile.yml                 versioned build, tests, Docker image, releases
+.github/workflows/ci.yml     tests, GHCR images, releases
 ```
 
 ### API
 
-- `GET /api/sources?user=<pseudo>` → sources disponibles pour un compte.
-- `POST /api/pick` avec `{"a":{"user":"…","source":"watchlist"},"b":{"user":"…","source":"list:<slug>"},"exclude":"<slug>"}` → `{"count": 126, "film": {…}, "imdb": {…}, "sizes": [1196, 632]}`.
-- En cas d’erreur : `{"code": "user_not_found", "user": "…", "error": "…"}`. L’interface traduit le message à partir de `code` (`user_not_found`, `list_not_found`, `private`, `blocked`, `timeout`, `upstream`, …).
+- `GET /api/sources?user=<username>` → available sources for an account.
+- `POST /api/pick` with `{"a":{"user":"…","source":"watchlist"},"b":{"user":"…","source":"list:<slug>"},"exclude":"<slug>"}` → `{"count": 126, "film": {…}, "imdb": {…}, "sizes": [1196, 632]}`.
+- On error: `{"code": "user_not_found", "user": "…", "error": "…"}`. The interface translates the message from `code` (`user_not_found`, `list_not_found`, `private`, `blocked`, `timeout`, `upstream`, …).
