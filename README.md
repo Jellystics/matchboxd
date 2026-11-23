@@ -22,11 +22,50 @@ go build -o app .
 
 Puis ouvrez <http://localhost:8080>.
 
-Pour un binaire statique (prêt pour un conteneur `scratch`/`distroless`) :
+Avec [Task](https://taskfile.dev) (fourni par le flake), le binaire embarque aussi sa version (tirée de `git describe`) :
 
 ```sh
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o app .
+task build   # binaire statique ./app versionné
+task run     # compile et lance
+./app -version
 ```
+
+Binaires précompilés (Linux, macOS, Windows, FreeBSD ; amd64, arm64, arm…) : voir les [Releases GitHub](https://github.com/Jellystics/matchboxd/releases).
+
+## Docker
+
+Image multi-architecture publiée sur GHCR : `linux/amd64`, `arm64`, `arm/v7`, `arm/v6`, `386`, `ppc64le`, `s390x`, `riscv64`.
+
+```sh
+docker run -d --name matchboxd -p 8080:8080 \
+  -e OMDB_API_KEY=abcd1234 \
+  -v matchboxd-data:/data \
+  ghcr.io/jellystics/matchboxd:latest
+```
+
+- L’image part de `scratch` (~19 Mo) et tourne en utilisateur non-root (`65532`).
+- Le volume `/data` conserve la session Letterboxd (`/data/session.json`) entre les redémarrages.
+- Tags disponibles : `latest` et `1.2.3` / `1.2` / `1` pour les versions, `edge` pour la branche `main`, `sha-abc1234` pour chaque commit.
+
+Pour construire l’image localement : `task docker` (ou `docker build -t matchboxd .`).
+
+## Versions et publication
+
+Le projet suit le [versionnage sémantique](https://semver.org/lang/fr/) via des tags git `vX.Y.Z`. Le workflow GitHub Actions (`.github/workflows/ci.yml`) :
+
+| Événement            | Tests | Image Docker                             | Release GitHub |
+|----------------------|-------|------------------------------------------|----------------|
+| Pull request         | ✅    | construite, non publiée                  | —              |
+| Push sur `main`      | ✅    | publiée en `edge` et `sha-…`             | —              |
+| Tag `v1.2.3`         | ✅    | publiée en `1.2.3`, `1.2`, `1`, `latest` | binaires + sommes SHA-256 |
+
+Pour publier une version :
+
+```sh
+task release -- v1.2.3     # crée le tag annoté et le pousse ; la CI fait le reste
+```
+
+Un tag avec suffixe (`v1.2.3-rc.1`) produit une pré-release. Les versions `v0.x` ne reçoivent pas le tag Docker majeur `0`.
 
 ### Configuration
 
@@ -93,6 +132,9 @@ internal/letterboxd/         client Letterboxd : requêtes, cache, parsing HTML
 internal/omdb/               note IMDb via l’API OMDb
 internal/server/             API JSON (/api/sources, /api/pick) et fichiers statiques
 web/                         interface : index.html, style.css, app.js (embarqués)
+Dockerfile                   image multi-architecture (cross-compilation Go, base scratch)
+Taskfile.yml                 build versionné, tests, image Docker, publication
+.github/workflows/ci.yml     tests, images GHCR, releases
 ```
 
 ### API
