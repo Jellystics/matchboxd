@@ -2,6 +2,8 @@
 
 A small web app that randomly picks **a movie for two people to watch together**, based on their [Letterboxd](https://letterboxd.com) accounts.
 
+<img width="3478" height="2089" alt="image" src="https://github.com/user-attachments/assets/50aa05f3-84f0-4927-96da-fd7da159d132" />
+
 1. Enter two Letterboxd usernames.
 2. For each person, pick a source: watchlist, watched films, liked films or a custom list.
 3. Click **Pick a movie**: the app shows a movie that appears in **both** sources (poster, director, runtime, genres, synopsis, Letterboxd rating, and IMDb rating when an OMDb key is set).
