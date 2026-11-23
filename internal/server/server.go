@@ -41,7 +41,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 	user := strings.TrimSpace(r.URL.Query().Get("user"))
 	if !letterboxd.ValidUsername(user) {
-		writeError(w, http.StatusBadRequest, "Nom d’utilisateur invalide.")
+		writeError(w, http.StatusBadRequest, "invalid_user", "", "Invalid username.")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
@@ -53,7 +53,8 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{"user": strings.ToLower(user), "sources": sources}
 	if !complete {
-		resp["warning"] = "Letterboxd a limité nos requêtes : certaines listes personnalisées peuvent manquer."
+		// Some pages of the user's lists were blocked: lists may be missing.
+		resp["partial"] = true
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -80,16 +81,16 @@ type pickResponse struct {
 func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
 	var req pickRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Requête invalide.")
+		writeError(w, http.StatusBadRequest, "bad_request", "", "Invalid request.")
 		return
 	}
 	for _, side := range []pickSide{req.A, req.B} {
 		if !letterboxd.ValidUsername(side.User) {
-			writeError(w, http.StatusBadRequest, "Nom d’utilisateur invalide.")
+			writeError(w, http.StatusBadRequest, "invalid_user", "", "Invalid username.")
 			return
 		}
 		if _, err := letterboxd.SourcePath(side.User, side.Source); err != nil {
-			writeError(w, http.StatusBadRequest, "Source invalide.")
+			writeError(w, http.StatusBadRequest, "invalid_source", "", "Invalid source.")
 			return
 		}
 	}
@@ -178,26 +179,26 @@ func (s *Server) writeLetterboxdError(w http.ResponseWriter, err error, user, so
 		switch {
 		case source == "":
 			if user != "" {
-				writeError(w, http.StatusNotFound, "Utilisateur « "+user+" » introuvable sur Letterboxd.")
+				writeError(w, http.StatusNotFound, "user_not_found", user, "Letterboxd user not found.")
 			} else {
-				writeError(w, http.StatusNotFound, "Film introuvable sur Letterboxd.")
+				writeError(w, http.StatusNotFound, "film_not_found", "", "Film not found on Letterboxd.")
 			}
 		case strings.HasPrefix(source, letterboxd.SourceList+":"):
-			writeError(w, http.StatusNotFound, "La liste de « "+user+" » est introuvable ou privée.")
+			writeError(w, http.StatusNotFound, "list_not_found", user, "List not found or private.")
 		default:
-			writeError(w, http.StatusNotFound, "Utilisateur « "+user+" » introuvable sur Letterboxd.")
+			writeError(w, http.StatusNotFound, "user_not_found", user, "Letterboxd user not found.")
 		}
 	case errors.Is(err, letterboxd.ErrPrivate):
-		writeError(w, http.StatusForbidden, "Cette source de « "+user+" » est privée.")
+		writeError(w, http.StatusForbidden, "private", user, "This source is private.")
 	case errors.Is(err, letterboxd.ErrBlocked):
-		writeError(w, http.StatusBadGateway, "Letterboxd bloque temporairement nos requêtes (protection anti-robots). Réessayez dans quelques minutes.")
+		writeError(w, http.StatusBadGateway, "blocked", "", "Letterboxd is blocking our requests (bot protection). Try again in a few minutes.")
 	case errors.Is(err, context.DeadlineExceeded):
-		writeError(w, http.StatusGatewayTimeout, "Letterboxd met trop de temps à répondre. Réessayez.")
+		writeError(w, http.StatusGatewayTimeout, "timeout", "", "Letterboxd is taking too long to respond.")
 	case errors.Is(err, context.Canceled):
 		// Client went away; nothing useful to send.
 	default:
 		log.Printf("letterboxd error: %v", err)
-		writeError(w, http.StatusBadGateway, "Impossible de joindre Letterboxd pour le moment.")
+		writeError(w, http.StatusBadGateway, "upstream", "", "Cannot reach Letterboxd right now.")
 	}
 }
 
@@ -207,8 +208,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+// writeError sends {"error": msg, "code": code, "user": user}. The frontend
+// translates the message from the code; msg is an English fallback.
+func writeError(w http.ResponseWriter, status int, code, user, msg string) {
+	body := map[string]string{"error": msg, "code": code}
+	if user != "" {
+		body["user"] = user
+	}
+	writeJSON(w, status, body)
 }
 
 func logRequests(next http.Handler) http.Handler {

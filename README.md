@@ -7,11 +7,13 @@ Petite application web pour tirer au sort **un film à regarder à deux**, à pa
 3. Cliquez sur **Tirer un film** : l’application affiche un film présent dans les **deux** sources (affiche, réalisateur, durée, genres, synopsis, note Letterboxd, note IMDb si une clé OMDb est configurée).
 4. **Un autre** retire un film parmi les films en commun, sans répéter celui affiché.
 
+L’interface est disponible en **français et en anglais** (bouton FR | EN en haut à droite ; langue du navigateur par défaut, choix mémorisé). Les synopsis restent dans la langue fournie par Letterboxd (anglais).
+
 Tout tient dans un seul exécutable Go : l’API JSON et l’interface (HTML/CSS/JS embarqués avec `go:embed`).
 
 ## Compiler et lancer
 
-Prérequis : Go ≥ 1.26 (ou `nix develop` grâce au `flake.nix` du dépôt).
+Prérequis : Go ≥ 1.27 (ou `nix develop` grâce au `flake.nix` du dépôt).
 
 ```sh
 go build -o app .
@@ -33,6 +35,12 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o app .
 | `PORT`                   | `-port`         | `8080` | Port HTTP                                     |
 | `OMDB_API_KEY`           | `-omdb-key`     | —      | Clé OMDb pour afficher la note IMDb (optionnel) |
 | —                        | `-cache-ttl`    | `10m`  | Durée de conservation des pages en mémoire    |
+| `MATCHBOXD_SESSION`      | `-session`      | cache utilisateur | Fichier où la session Letterboxd (cookies) est conservée |
+| `MATCHBOXD_BROWSER`      | `-browser`      | `chrome_152` | Version de Chrome dont l’empreinte TLS est imitée |
+
+Le fichier de session vaut par défaut `~/Library/Caches/matchboxd/session.json` (macOS),
+`~/.cache/matchboxd/session.json` (Linux) ou `%LocalAppData%\matchboxd\session.json` (Windows).
+Supprimez-le pour repartir d’une session neuve.
 
 ```sh
 OMDB_API_KEY=abcd1234 PORT=3000 ./app
@@ -66,13 +74,15 @@ Si Letterboxd modifie son HTML, enregistrez de nouvelles pages dans `testdata/` 
 ## Fonctionnement
 
 - Letterboxd n’a pas d’API publique : le serveur Go lit les pages publiques (`/<user>/watchlist/`, `/<user>/films/`, `/<user>/likes/films/`, `/<user>/lists/`, `/<user>/list/<liste>/`, `/film/<film>/`) et les analyse avec [goquery](https://github.com/PuerkitoBio/goquery).
-- Toutes les pages d’une source sont récupérées (quelques requêtes en parallèle, au maximum ~6 par seconde).
+- Les requêtes imitent un onglet Chrome : empreinte TLS et HTTP/2 de Chrome 152 ([tls-client](https://github.com/bogdanfinn/tls-client)), en-têtes dans l’ordre du navigateur (`sec-ch-ua`, `Sec-Fetch-*`, `Referer`, `Accept-Language`…).
+- Chaque lancement reprend la même session : une navigation de préchauffage ouvre l’accueil, puis les cookies Cloudflare (`__cf_bm`, `cf_clearance`) sont conservés dans le fichier de session et rechargés au démarrage suivant.
+- Toutes les pages d’une source sont récupérées (quelques requêtes en parallèle, espacées aléatoirement de 120 à 320 ms).
 - Les films sont comparés par leur *slug* Letterboxd, pas par leur titre.
 - Les pages analysées sont gardées en mémoire quelques minutes : les tirages suivants sont instantanés.
 
 ### Limites connues
 
-Letterboxd est protégé par Cloudflare, qui peut présenter un défi anti-robots à certaines pages selon le réseau d’où viennent les requêtes. Lors du développement, depuis une connexion résidentielle, les **watchlists**, **listes personnalisées** et **fiches de films** passaient, alors que les **films aimés** et les pages 2+ des **films vus** et de l’index des listes étaient bloqués. L’application ne contourne pas ces protections : elle affiche un message clair (« Letterboxd bloque temporairement nos requêtes… ») et, pour l’index des listes, propose les listes de la première page avec un avertissement.
+Letterboxd est protégé par Cloudflare. L’empreinte TLS de Chrome et la session persistante suffisent pour la plupart des pages (watchlists, films vus, films aimés, listes et fiches de films passent en pratique), mais Cloudflare peut encore présenter un **défi JavaScript** selon le réseau ou l’IP. Ce défi ne peut être résolu qu’en exécutant du JavaScript dans un vrai navigateur : l’application ne le fait pas et affiche alors un message clair (« Letterboxd bloque temporairement nos requêtes… »). Pour l’index des listes, elle propose les listes de la première page avec un avertissement.
 
 ## Structure
 
@@ -89,3 +99,4 @@ web/                         interface : index.html, style.css, app.js (embarqu�
 
 - `GET /api/sources?user=<pseudo>` → sources disponibles pour un compte.
 - `POST /api/pick` avec `{"a":{"user":"…","source":"watchlist"},"b":{"user":"…","source":"list:<slug>"},"exclude":"<slug>"}` → `{"count": 126, "film": {…}, "imdb": {…}, "sizes": [1196, 632]}`.
+- En cas d’erreur : `{"code": "user_not_found", "user": "…", "error": "…"}`. L’interface traduit le message à partir de `code` (`user_not_found`, `list_not_found`, `private`, `blocked`, `timeout`, `upstream`, …).

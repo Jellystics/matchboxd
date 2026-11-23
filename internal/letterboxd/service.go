@@ -45,18 +45,50 @@ type Client struct {
 	films     *Cache[Film]
 }
 
-// New returns a client that caches pages for ttl.
-func New(ttl time.Duration) *Client { return newClient(BaseURL, ttl) }
+// Option configures the Letterboxd client.
+type Option func(*clientConfig)
 
-func newClient(baseURL string, ttl time.Duration) *Client {
+type clientConfig struct {
+	sessionFile string
+	profile     string
+}
+
+// WithSessionFile stores the browser session (cookies) in path so that it
+// survives restarts. An empty path disables persistence.
+func WithSessionFile(path string) Option {
+	return func(c *clientConfig) { c.sessionFile = path }
+}
+
+// WithBrowserProfile selects the Chrome build whose TLS and HTTP/2
+// fingerprints are imitated, e.g. "chrome_152".
+func WithBrowserProfile(name string) Option {
+	return func(c *clientConfig) { c.profile = name }
+}
+
+// New returns a client that caches pages for ttl.
+func New(ttl time.Duration, opts ...Option) *Client { return newClient(BaseURL, ttl, opts...) }
+
+func newClient(baseURL string, ttl time.Duration, opts ...Option) *Client {
+	var cfg clientConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &Client{
-		f:         newFetcher(baseURL),
+		f: newFetcher(fetcherConfig{
+			baseURL:     baseURL,
+			profile:     cfg.profile,
+			sessionFile: cfg.sessionFile,
+			insecureTLS: isLoopback(baseURL),
+		}),
 		gridPages: NewCache[filmPage](ttl),
 		listPages: NewCache[listsPage](ttl),
 		// Film details change rarely; keep them longer.
 		films: NewCache[Film](6 * ttl),
 	}
 }
+
+// Close flushes the browser session to disk and releases idle connections.
+func (c *Client) Close() { c.f.close() }
 
 // Sources returns all the film sources of a user: the three built-in ones
 // and every custom list. It returns ErrNotFound for an unknown user.
@@ -73,8 +105,8 @@ func (c *Client) Sources(ctx context.Context, user string) (sources []Source, co
 	}
 	sources = []Source{
 		{ID: SourceWatchlist, Kind: SourceWatchlist, Label: "Watchlist"},
-		{ID: SourceFilms, Kind: SourceFilms, Label: "Films vus"},
-		{ID: SourceLikes, Kind: SourceLikes, Label: "Films aimés"},
+		{ID: SourceFilms, Kind: SourceFilms, Label: "Watched films"},
+		{ID: SourceLikes, Kind: SourceLikes, Label: "Liked films"},
 	}
 	for _, l := range lists {
 		sources = append(sources, Source{ID: SourceList + ":" + l.Slug, Kind: SourceList, Label: l.Name, Count: l.Count})
@@ -115,7 +147,7 @@ func (c *Client) lists(ctx context.Context, user string) (lists []ListRef, compl
 func (c *Client) listsPage(ctx context.Context, base string, n int) (listsPage, error) {
 	path := pagePath(base, n)
 	return c.listPages.GetOrLoad(path, func() (listsPage, error) {
-		body, err := c.f.get(ctx, path)
+		body, err := c.f.get(ctx, path, c.f.referer(base, n))
 		if err != nil {
 			return listsPage{}, err
 		}
@@ -186,7 +218,7 @@ func (c *Client) Films(ctx context.Context, user, sourceID string) ([]FilmRef, e
 func (c *Client) gridPage(ctx context.Context, base string, n int) (filmPage, error) {
 	path := pagePath(base, n)
 	return c.gridPages.GetOrLoad(path, func() (filmPage, error) {
-		body, err := c.f.get(ctx, path)
+		body, err := c.f.get(ctx, path, c.f.referer(base, n))
 		if err != nil {
 			return filmPage{}, err
 		}
@@ -200,7 +232,7 @@ func (c *Client) Film(ctx context.Context, slug string) (Film, error) {
 		return Film{}, ErrNotFound
 	}
 	return c.films.GetOrLoad(slug, func() (Film, error) {
-		body, err := c.f.get(ctx, "/film/"+slug+"/")
+		body, err := c.f.get(ctx, "/film/"+slug+"/", c.f.homepage())
 		if err != nil {
 			return Film{}, err
 		}

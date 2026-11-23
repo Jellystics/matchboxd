@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1020">
   <meta name="description" content="Tirez au sort un film à regarder à deux, à partir de vos comptes Letterboxd.">
-  <title>matchboxd — un film pour deux</title>
+  <title>matchboxd</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -17,22 +17,27 @@
   </div>
 
   <main class="shell">
+    <nav class="lang" aria-label="Langue / Language">
+      <button type="button" data-lang="fr" lang="fr">FR</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+
     <header class="masthead">
       <h1 class="logo"><span class="logo-mark" aria-hidden="true"><i></i><i></i></span>matchboxd</h1>
-      <p class="tagline">Un film pour deux, tiré au sort dans vos Letterboxd.</p>
+      <p class="tagline" data-i18n="tagline"></p>
     </header>
 
     <form class="pickers" id="form" novalidate>
       <fieldset class="panel person" data-side="a">
-        <legend class="person-label"><span class="dot"></span>Personne 1</legend>
+        <legend class="person-label"><span class="dot"></span><span data-i18n="person1"></span></legend>
         <label class="field">
-          <span>Pseudo Letterboxd</span>
-          <input type="text" name="user" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ex. davidehrlich" inputmode="text">
+          <span data-i18n="username"></span>
+          <input type="text" name="user" autocomplete="off" autocapitalize="off" spellcheck="false" data-i18n-placeholder="placeholderA">
         </label>
         <label class="field">
-          <span>Source</span>
+          <span data-i18n="source"></span>
           <div class="select-wrap">
-            <select name="source" disabled><option>Entrez un pseudo</option></select>
+            <select name="source" disabled></select>
           </div>
         </label>
         <p class="field-msg" role="status"></p>
@@ -41,15 +46,15 @@
       <div class="amp" aria-hidden="true">&amp;</div>
 
       <fieldset class="panel person" data-side="b">
-        <legend class="person-label"><span class="dot"></span>Personne 2</legend>
+        <legend class="person-label"><span class="dot"></span><span data-i18n="person2"></span></legend>
         <label class="field">
-          <span>Pseudo Letterboxd</span>
-          <input type="text" name="user" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ex. karsten" inputmode="text">
+          <span data-i18n="username"></span>
+          <input type="text" name="user" autocomplete="off" autocapitalize="off" spellcheck="false" data-i18n-placeholder="placeholderB">
         </label>
         <label class="field">
-          <span>Source</span>
+          <span data-i18n="source"></span>
           <div class="select-wrap">
-            <select name="source" disabled><option>Entrez un pseudo</option></select>
+            <select name="source" disabled></select>
           </div>
         </label>
         <p class="field-msg" role="status"></p>
@@ -57,8 +62,9 @@
 
       <div class="actions">
         <button type="submit" class="btn btn-primary" id="pick" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
-          <span>Tirer un film</span>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+          <svg class="icon-loader" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+          <span data-i18n="pick"></span>
         </button>
       </div>
     </form>
@@ -67,8 +73,8 @@
   </main>
 
   <footer class="foot">
-    Données lues sur <a href="https://letterboxd.com" target="_blank" rel="noopener">Letterboxd</a>.
-    Projet non affilié.
+    <span data-i18n="footer"></span> <a href="https://letterboxd.com" target="_blank" rel="noopener">Letterboxd</a>.
+    <span data-i18n="notAffiliated"></span>
   </footer>
 
   <template id="tpl-film">
@@ -86,8 +92,9 @@
         <p class="synopsis"></p>
         <div class="film-actions">
           <button type="button" class="btn btn-primary again">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg>
-            <span>Un autre</span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg>
+            <svg class="icon-loader" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            <span data-i18n="again"></span>
           </button>
           <a class="btn btn-ghost lb-link" target="_blank" rel="noopener">Letterboxd</a>
           <a class="btn btn-ghost imdb-link" target="_blank" rel="noopener">IMDb</a>

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -23,13 +24,17 @@ func main() {
 	port := flag.String("port", envOr("PORT", "8080"), "HTTP port (env PORT)")
 	omdbKey := flag.String("omdb-key", os.Getenv("OMDB_API_KEY"), "OMDb API key for IMDb ratings (env OMDB_API_KEY, optional)")
 	cacheTTL := flag.Duration("cache-ttl", 10*time.Minute, "how long Letterboxd pages stay in the memory cache")
+	sessionFile := flag.String("session", defaultSessionFile(), "file where the Letterboxd browser session (cookies) is kept (env MATCHBOXD_SESSION)")
+	browser := flag.String("browser", envOr("MATCHBOXD_BROWSER", "chrome_152"), "Chrome build whose TLS fingerprint is imitated, e.g. chrome_152 (env MATCHBOXD_BROWSER)")
 	flag.Parse()
 
 	om := omdb.New(*omdbKey)
 	if om == nil {
 		log.Print("OMDB_API_KEY not set: IMDb ratings are disabled")
 	}
-	srv := server.New(letterboxd.New(*cacheTTL), om, web.FS)
+	lb := letterboxd.New(*cacheTTL, letterboxd.WithSessionFile(*sessionFile), letterboxd.WithBrowserProfile(*browser))
+	defer lb.Close()
+	srv := server.New(lb, om, web.FS)
 
 	httpSrv := &http.Server{
 		Addr:              ":" + *port,
@@ -50,6 +55,19 @@ func main() {
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+}
+
+// defaultSessionFile returns where the cookie jar is stored between runs:
+// MATCHBOXD_SESSION, or <user cache dir>/matchboxd/session.json.
+func defaultSessionFile() string {
+	if v := os.Getenv("MATCHBOXD_SESSION"); v != "" {
+		return v
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "matchboxd", "session.json")
 }
 
 func envOr(key, def string) string {
